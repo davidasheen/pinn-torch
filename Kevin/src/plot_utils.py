@@ -15,3 +15,5 @@ def apply_plot_style():
     plt.rc("xtick", labelsize=11)
     plt.rc("ytick", labelsize=11)
     plt.rc("lines", linewidth=2)
+    plt.rc("figure", dpi=100)
+    plt.rc("savefig", dpi=150, bbox="tight")
