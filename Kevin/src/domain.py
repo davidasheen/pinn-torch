@@ -57,6 +57,45 @@ def _sides(where):
     return (("_lo", "lo"), ("_hi", "hi")) if where["side"] == "pair" else (("", where["side"]),)
 
 
+class BoxDomain:
+    def __init__(self, lo, hi):
+        self.lo = np.asarray(lo, dtype=float).reshape(-1)
+        self.hi = np.asarray(hi, dtype=float).reshape(-1)
+        if self.lo.size != 4 or self.hi.size != 4:
+            raise ValueError("BoxDomain needs 4-entry lo/hi for (x, y, z, t)")
+
+    @property
+    def bounds(self):
+        return self.lo.copy(), self.hi.copy()
+
+    def describe(self):
+        return {"type": "BoxDomain", "lo": self.lo.tolist(), "hi": self.hi.tolist()}
+
+    def sample(self, n, generator, dtype, device):
+        lo = torch.as_tensor(self.lo, dtype=dtype, device=device)
+        hi = torch.as_tensor(self.hi, dtype=dtype, device=device)
+        return lo + (hi - lo) * torch.rand((n, 4), generator=generator, dtype=dtype, device=device)
+
+    def sample_vertices(self, n, generator, dtype, device):
+        return self.sample(n, generator, dtype, device)
+
+    def sample_boundary(self, where, n, generator, dtype, device):
+        if "faces" in where:
+            raise ValueError("BoxDomain has no mesh faces; boundary specs must use axis/side (or use MeshDomain)")
+        axis = int(where["axis"])
+        base = self.sample(n, generator, dtype, device)
+        out = {}
+        for suffix, side in _sides(where):
+            X = base.clone()
+            X[:, axis] = float((self.lo if side == "lo" else self.hi)[axis])
+            normal = None
+            if axis < 3:
+                normal = torch.zeros((n, 3), dtype=dtype, device=device)
+                normal[:, axis] = -1.0 if side == "lo" else 1.0
+            out[suffix] = {"X": X, "normal": normal, "node": None}
+        return out
+
+
 class MeshDomain:
     def __init__(self, mesh, length_scale=1.0, t_range=(0.0, 1.0), s_values=None, s_discrete=False):
         self.length_scale = float(length_scale)

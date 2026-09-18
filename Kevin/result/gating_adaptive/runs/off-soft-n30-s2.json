@@ -1,0 +1,179 @@
+{
+  "schema": 1,
+  "id": "off-soft-n30-s2",
+  "kind": "soret",
+  "arm": "off",
+  "stage": "A",
+  "architecture": "fnn",
+  "adaptive": false,
+  "scheme": "soft",
+  "n_samples": 30,
+  "seed": 2,
+  "lift": null,
+  "ell": 0.1,
+  "loss_weight_alpha": null,
+  "loss_weight_update_every": null,
+  "n_net_params": 13190,
+  "bc_fields": [
+    "T",
+    "Y",
+    "u",
+    "v",
+    "w"
+  ],
+  "hard_fields": [],
+  "n_data": 30,
+  "n_bc_given": 400,
+  "n_bc_in_loss": 400,
+  "budget": {
+    "adam": 1500,
+    "lbfgs": 1000,
+    "num_domain": 4000
+  },
+  "wall_clock_s": 100.96358520002104,
+  "gpu_check": {
+    "time": "2026-08-19T15:54:08",
+    "other_compute_processes": [],
+    "util_samples": [],
+    "busy_other": false,
+    "idle_context_holders": [],
+    "nvidia_smi": "Wed Aug 19 15:54:08 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 596.49                 Driver Version: 596.49         CUDA Version: 13.2     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  NVIDIA GeForce RTX 5090      WDDM  |   00000000:01:00.0  On |                  N/A |\n| 37%   42C    P1            128W /  575W |    6452MiB /  32607MiB |     15%      Default |\n|                                         |                        |                  N/A |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|    0   N/A  N/A            1968    C+G   ...ntrolPanel\\SystemSettings.exe      N/A      |\n|    0   N/A  N/A            3116    C+G   ...t\\Edge\\Application\\msedge.exe      N/A      |\n|    0   N/A  N/A            3336    C+G   ..._pzs8sxrjxfjjc\\app\\claude.exe      N/A      |\n|    0   N/A  N/A            4708    C+G   ...em32\\ApplicationFrameHost.exe      N/A      |\n|    0   N/A  N/A            6196    C+G   ...SnippingTool\\SnippingTool.exe      N/A      |\n|    0   N/A  N/A            9060    C+G   ..._pzs8sxrjxfjjc\\app\\claude.exe      N/A      |\n|    0   N/A  N/A           10916    C+G   ...2p2nqsd0c76g0\\app\\ChatGPT.exe      N/A      |\n|    0   N/A  N/A           17628    C+G   ...y\\StartMenuExperienceHost.exe      N/A      |\n|    0   N/A  N/A           17752    C+G   ..._cw5n1h2txyewy\\SearchHost.exe      N/A      |\n|    0   N/A  N/A           19164    C+G   C:\\Windows\\explorer.exe               N/A      |\n|    0   N/A  N/A           19584    C+G   ...2txyewy\\CrossDeviceResume.exe      N/A      |\n|    0   N/A  N/A           21336    C+G   ..._pzs8sxrjxfjjc\\app\\claude.exe      N/A      |\n|    0   N/A  N/A           21740    C+G   ...les\\TeamViewer\\TeamViewer.exe      N/A      |\n|    0   N/A  N/A           21916    C+G   ...8bbwe\\PhoneExperienceHost.exe      N/A      |\n|    0   N/A  N/A           26260    C+G   ....0.4129.78\\msedgewebview2.exe      N/A      |\n|    0   N/A  N/A           26852    C+G   ....0.4129.78\\msedgewebview2.exe      N/A      |\n|    0   N/A  N/A           27708    C+G   ...t\\Edge\\Application\\msedge.exe      N/A      |\n|    0   N/A  N/A           28440    C+G   ....0.4129.86\\msedgewebview2.exe      N/A      |\n|    0   N/A  N/A           29276    C+G   ...8bbwe\\Microsoft.CmdPal.UI.exe      N/A      |\n|    0   N/A  N/A           29724    C+G   ...5n1h2txyewy\\TextInputHost.exe      N/A      |\n|    0   N/A  N/A           33244    C+G   ...86)\\Tencent\\Weixin\\Weixin.exe      N/A      |\n|    0   N/A  N/A           33332    C+G   ...s\\PowerToys.PowerLauncher.exe      N/A      |\n|    0   N/A  N/A           33868    C+G   ....0.4129.78\\msedgewebview2.exe      N/A      |\n|    0   N/A  N/A           34412    C+G   ...xyewy\\ShellExperienceHost.exe      N/A      |\n|    0   N/A  N/A           37892    C+G   ...crosoft OneDrive\\OneDrive.exe      N/A      |\n|    0   N/A  N/A           39364    C+G   ...ct\\Application\\YoudaoDict.exe      N/A      |\n|    0   N/A  N/A           39612    C+G   ...1.3.16.0\\YoudaoDictHelper.exe      N/A      |\n|    0   N/A  N/A           40472    C+G   ...4__8wekyb3d8bbwe\\Video.UI.exe      N/A      |\n|    0   N/A  N/A           44272    C+G   ...ms\\Microsoft VS Code\\Code.exe      N/A      |\n|    0   N/A  N/A           49752    C+G   ...t\\Edge\\Application\\msedge.exe      N/A      |\n|    0   N/A  N/A           51508      C   ...naconda3\\envs\\ct25\\python.exe      N/A      |\n|    0   N/A  N/A           53184    C+G   ...indows\\System32\\ShellHost.exe      N/A      |\n|    0   N/A  N/A           55952    C+G   ...4__8wekyb3d8bbwe\\ms-teams.exe      N/A      |\n|    0   N/A  N/A           57400    C+G   ...2p2nqsd0c76g0\\app\\ChatGPT.exe      N/A      |\n|    0   N/A  N/A           62728    C+G   C:\\Windows\\explorer.exe               N/A      |\n|    0   N/A  N/A           64228    C+G   ....0.4129.86\\msedgewebview2.exe      N/A      |\n|    0   N/A  N/A           65404    C+G   ...ice\\root\\Office16\\ONENOTE.EXE      N/A      |\n|    0   N/A  N/A           65968    C+G   ...4__8wekyb3d8bbwe\\ms-teams.exe      N/A      |\n|    0   N/A  N/A           66552    C+G   ...acted\\runtime\\WeChatAppEx.exe      N/A      |\n|    0   N/A  N/A           67884    C+G   ...ms\\Microsoft VS Code\\Code.exe      N/A      |\n|    0   N/A  N/A           70396    C+G   ...IA app\\CEF\\NVIDIA Overlay.exe      N/A      |\n|    0   N/A  N/A           70556    C+G   ...IA app\\CEF\\NVIDIA Overlay.exe      N/A      |\n+-----------------------------------------------------------------------------------------+\n",
+    "skipped": false
+  },
+  "gpu_check_post": {
+    "time": "2026-08-19T15:55:49",
+    "other_compute_processes": [],
+    "util_samples": [],
+    "busy_other": false,
+    "idle_context_holders": [],
+    "nvidia_smi": "Wed Aug 19 15:55:49 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 596.49                 Driver Version: 596.49         CUDA Version: 13.2     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  NVIDIA GeForce RTX 5090      WDDM  |   00000000:01:00.0  On |                  N/A |\n| 37%   42C    P1            127W /  575W |    6452MiB /  32607MiB |     20%      Default |\n|                                         |                        |                  N/A |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|    0   N/A  N/A            1968    C+G   ...ntrolPanel\\SystemSettings.exe      N/A      |\n|    0   N/A  N/A            3116    C+G   ...t\\Edge\\Application\\msedge.exe      N/A      |\n|    0   N/A  N/A            3336    C+G   ..._pzs8sxrjxfjjc\\app\\claude.exe      N/A      |\n|    0   N/A  N/A            4708    C+G   ...em32\\ApplicationFrameHost.exe      N/A      |\n|    0   N/A  N/A            6196    C+G   ...SnippingTool\\SnippingTool.exe      N/A      |\n|    0   N/A  N/A            9060    C+G   ..._pzs8sxrjxfjjc\\app\\claude.exe      N/A      |\n|    0   N/A  N/A           10916    C+G   ...2p2nqsd0c76g0\\app\\ChatGPT.exe      N/A      |\n|    0   N/A  N/A           17628    C+G   ...y\\StartMenuExperienceHost.exe      N/A      |\n|    0   N/A  N/A           17752    C+G   ..._cw5n1h2txyewy\\SearchHost.exe      N/A      |\n|    0   N/A  N/A           19164    C+G   C:\\Windows\\explorer.exe               N/A      |\n|    0   N/A  N/A           19584    C+G   ...2txyewy\\CrossDeviceResume.exe      N/A      |\n|    0   N/A  N/A           21336    C+G   ..._pzs8sxrjxfjjc\\app\\claude.exe      N/A      |\n|    0   N/A  N/A           21740    C+G   ...les\\TeamViewer\\TeamViewer.exe      N/A      |\n|    0   N/A  N/A           21916    C+G   ...8bbwe\\PhoneExperienceHost.exe      N/A      |\n|    0   N/A  N/A           26260    C+G   ....0.4129.78\\msedgewebview2.exe      N/A      |\n|    0   N/A  N/A           26852    C+G   ....0.4129.78\\msedgewebview2.exe      N/A      |\n|    0   N/A  N/A           27708    C+G   ...t\\Edge\\Application\\msedge.exe      N/A      |\n|    0   N/A  N/A           28440    C+G   ....0.4129.86\\msedgewebview2.exe      N/A      |\n|    0   N/A  N/A           29276    C+G   ...8bbwe\\Microsoft.CmdPal.UI.exe      N/A      |\n|    0   N/A  N/A           29724    C+G   ...5n1h2txyewy\\TextInputHost.exe      N/A      |\n|    0   N/A  N/A           33244    C+G   ...86)\\Tencent\\Weixin\\Weixin.exe      N/A      |\n|    0   N/A  N/A           33332    C+G   ...s\\PowerToys.PowerLauncher.exe      N/A      |\n|    0   N/A  N/A           33868    C+G   ....0.4129.78\\msedgewebview2.exe      N/A      |\n|    0   N/A  N/A           34412    C+G   ...xyewy\\ShellExperienceHost.exe      N/A      |\n|    0   N/A  N/A           37892    C+G   ...crosoft OneDrive\\OneDrive.exe      N/A      |\n|    0   N/A  N/A           39364    C+G   ...ct\\Application\\YoudaoDict.exe      N/A      |\n|    0   N/A  N/A           39612    C+G   ...1.3.16.0\\YoudaoDictHelper.exe      N/A      |\n|    0   N/A  N/A           40472    C+G   ...4__8wekyb3d8bbwe\\Video.UI.exe      N/A      |\n|    0   N/A  N/A           44272    C+G   ...ms\\Microsoft VS Code\\Code.exe      N/A      |\n|    0   N/A  N/A           49752    C+G   ...t\\Edge\\Application\\msedge.exe      N/A      |\n|    0   N/A  N/A           51508      C   ...naconda3\\envs\\ct25\\python.exe      N/A      |\n|    0   N/A  N/A           53184    C+G   ...indows\\System32\\ShellHost.exe      N/A      |\n|    0   N/A  N/A           55952    C+G   ...4__8wekyb3d8bbwe\\ms-teams.exe      N/A      |\n|    0   N/A  N/A           57400    C+G   ...2p2nqsd0c76g0\\app\\ChatGPT.exe      N/A      |\n|    0   N/A  N/A           62728    C+G   C:\\Windows\\explorer.exe               N/A      |\n|    0   N/A  N/A           64228    C+G   ....0.4129.86\\msedgewebview2.exe      N/A      |\n|    0   N/A  N/A           65404    C+G   ...ice\\root\\Office16\\ONENOTE.EXE      N/A      |\n|    0   N/A  N/A           65968    C+G   ...4__8wekyb3d8bbwe\\ms-teams.exe      N/A      |\n|    0   N/A  N/A           66552    C+G   ...acted\\runtime\\WeChatAppEx.exe      N/A      |\n|    0   N/A  N/A           67884    C+G   ...ms\\Microsoft VS Code\\Code.exe      N/A      |\n|    0   N/A  N/A           70396    C+G   ...IA app\\CEF\\NVIDIA Overlay.exe      N/A      |\n|    0   N/A  N/A           70556    C+G   ...IA app\\CEF\\NVIDIA Overlay.exe      N/A      |\n+-----------------------------------------------------------------------------------------+\n"
+  },
+  "true": {
+    "mu": 0.08,
+    "D": 0.03,
+    "DT": 0.015
+  },
+  "mu": 0.07803762704133987,
+  "D": 0.028828436508774757,
+  "DT": 0.020233802497386932,
+  "mu_refit": 0.07773442566394806,
+  "D_refit": 0.02856707101151343,
+  "DT_refit": 0.02014760531983137,
+  "rel_err": {
+    "mu": 0.024529661983251592,
+    "D": 0.03905211637417472,
+    "DT": 0.3489201664924622
+  },
+  "rel_err_refit": {
+    "mu": 0.028319679200649282,
+    "D": 0.047764299616219016,
+    "DT": 0.34317368798875797
+  },
+  "refit_leverage": {
+    "mu": 0.2885822355747223,
+    "D": 1.2698811292648315,
+    "DT": 0.6933061480522156
+  },
+  "pde_loss_final": 2.3566954041598365e-05,
+  "data_loss_final": 1.5763866031193174e-05,
+  "loss_final": 3.933082189178094e-05,
+  "loss_weights_final": null,
+  "bc_residual": {
+    "u": {
+      "max": 0.00801759958267212,
+      "rms": 0.001470724237151444
+    },
+    "v": {
+      "max": 0.0015455763787031174,
+      "rms": 0.0004876577586401254
+    },
+    "w": {
+      "max": 0.002143464982509613,
+      "rms": 0.0006590923294425011
+    },
+    "T": {
+      "max": 0.008154630661010742,
+      "rms": 0.0016581249656155705
+    },
+    "Y": {
+      "max": 0.0035344362258911133,
+      "rms": 0.0008745482773520052
+    }
+  },
+  "history": {
+    "iteration": [
+      0,
+      500,
+      1000,
+      1499,
+      2000,
+      2500,
+      2500
+    ],
+    "loss": [
+      3.998645067214966,
+      0.05632079020142555,
+      0.03921060264110565,
+      0.016103355213999748,
+      0.00018587702652439475,
+      3.933082189178094e-05,
+      3.933082189178094e-05
+    ],
+    "data_loss": [
+      3.800964832305908,
+      0.049253471195697784,
+      0.03575602173805237,
+      0.013950567692518234,
+      8.405998960370198e-05,
+      1.5763866031193174e-05,
+      1.5763866031193174e-05
+    ],
+    "pde_loss": [
+      0.19768023490905762,
+      0.007067317608743906,
+      0.003454581368714571,
+      0.002152787521481514,
+      0.00010181704419665039,
+      2.3566954041598365e-05,
+      2.3566954041598365e-05
+    ],
+    "mu": [
+      0.9990000128746033,
+      0.7553933262825012,
+      0.5598965287208557,
+      0.22465533018112183,
+      0.06798215210437775,
+      0.07803762704133987,
+      0.07803762704133987
+    ],
+    "D": [
+      0.9990000128746033,
+      0.7950475215911865,
+      0.5665761828422546,
+      0.10087833553552628,
+      0.02944706566631794,
+      0.028828436508774757,
+      0.028828436508774757
+    ],
+    "DT": [
+      0.9990000128746033,
+      0.7584993839263916,
+      0.6642980575561523,
+      0.6276417374610901,
+      0.01820347271859646,
+      0.020233802497386932,
+      0.020233802497386932
+    ],
+    "loss_weights": [],
+    "refit": {
+      "mu_refit": 0.07773442566394806,
+      "D_refit": 0.02856707101151343,
+      "DT_refit": 0.02014760531983137,
+      "refit_leverage": {
+        "mu": 0.2885822355747223,
+        "D": 1.2698811292648315,
+        "DT": 0.6933061480522156
+      }
+    }
+  }
+}

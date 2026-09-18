@@ -937,7 +937,8 @@ class PINNTraining:
 
     @staticmethod
     def history_axis(history):
-        return np.asarray(history["epoch"]), "epoch"
+        key = "epoch" if "epoch" in history else "iteration"
+        return np.asarray(history[key]), key
 
     @staticmethod
     def best_axis(best):

@@ -1,0 +1,182 @@
+{
+  "6.1": {
+    "n_params_fnn": 13190,
+    "n_params_modified_mlp": 13830,
+    "rel_diff": 0.04852160727824109,
+    "threshold": 0.1,
+    "pass": true
+  },
+  "6.2": {
+    "pass": true,
+    "off_hard_n30_med_geo_err_seeds_0_4": 0.14289715178371742,
+    "off_soft_n3000_med_geo_err_seeds_0_4": 0.026580351821939734,
+    "rel_dev_hard_n30": 1.9931534517669156e-05,
+    "rel_dev_soft_n3000": 0.0007386533105362794,
+    "collapsed_seeds_0_4": 2,
+    "phase3_ref": {
+      "hard_n30_med_geo_err": 0.1429,
+      "soft_n3000_med_geo_err": 0.0266,
+      "hard_n30_collapsed_seeds_0_4": 2
+    },
+    "rel_dev_max": 0.2
+  },
+  "6.3": {
+    "cell": [
+      "soft",
+      3000
+    ],
+    "on_med_geo_err": 0.035000998113411924,
+    "off_med_geo_err": 0.026580351821939734,
+    "ratio": 1.3167996551694132,
+    "ratio_max": 0.7,
+    "on_DT_med_err": 0.09722499510723959,
+    "dt_max": 0.048,
+    "pass": false
+  },
+  "6.4": {
+    "cell": [
+      "hard",
+      30
+    ],
+    "on_collapsed": 6,
+    "off_collapsed": 3,
+    "n_seeds": 10,
+    "collapse_def": "mu_refit < 0.008 or D_refit < 0.003",
+    "pass": false
+  },
+  "6.5": {
+    "hard_over_soft_on": {
+      "3000": 9.800328598332666,
+      "30": 1.0664879469018287
+    },
+    "hard_over_soft_off": {
+      "3000": 0.26314752812554404,
+      "30": 1.492533463966162
+    },
+    "phase3_archived": {
+      "3000": 0.263,
+      "30": 1.547
+    },
+    "direction_flipped_at": [
+      3000
+    ],
+    "note": "flip => Phase 3 guidance is backbone-dependent (acceptance updates decisions.md)",
+    "pass": true
+  },
+  "6.6": {
+    "status": "not_triggered (recorded per pre-registration; not a failure)",
+    "pass": true
+  },
+  "6.7": {
+    "final_weight_readings": {
+      "hard-n3000": {
+        "median_final_max_residual_weight": 6.236825933138391,
+        "median_final_data_weight": 1.1517461524355366,
+        "median_final_residual_over_data": 5.103010786408065
+      },
+      "hard-n30": {
+        "median_final_max_residual_weight": 8.016614716987416,
+        "median_final_data_weight": 1.110692100742168,
+        "median_final_residual_over_data": 7.289414513888337
+      },
+      "soft-n3000": {
+        "median_final_max_residual_weight": 4.695410924277081,
+        "median_final_data_weight": 1.0,
+        "median_final_residual_over_data": 4.695410924277081
+      },
+      "soft-n30": {
+        "median_final_max_residual_weight": 10.1049240569511,
+        "median_final_data_weight": 1.0255492536556,
+        "median_final_residual_over_data": 9.599054843229574
+      }
+    },
+    "phase4_pattern_question": "did grad-norm lift residual weights above the data term (Phase-4-like suppression) in (hard, n=30)?",
+    "residual_over_data_hard_n30": 7.289414513888337,
+    "mechanical_reading": "data term SUPPRESSED (Phase-4-like)",
+    "pass": true
+  },
+  "6.8": {
+    "median_on_over_off_wall_clock": 2.0336339549961195,
+    "median_excluding_suspect_pairs": 2.0557166648451277,
+    "n_pairs": 30,
+    "n_suspect_pairs": 4,
+    "per_cell_median": {
+      "hard-n3000": 1.7837249437954443,
+      "hard-n30": 1.7792953277072456,
+      "soft-n3000": 2.081256289608762,
+      "soft-n30": 2.0901932632719884
+    },
+    "stage_b_decomposition": "stage B not run",
+    "protocol_violations": [
+      "on-hard-n30-s6"
+    ],
+    "suspect_wall_clocks": {
+      "off-hard-n30-s7": {
+        "wall_s": 224.4534496999695,
+        "config_median_s": 159.35076910004136,
+        "ratio": 1.408549522337456
+      },
+      "off-hard-n30-s8": {
+        "wall_s": 247.3823786000139,
+        "config_median_s": 159.35076910004136,
+        "ratio": 1.5524391880700983
+      },
+      "off-hard-n3000-s4": {
+        "wall_s": 257.4620833999943,
+        "config_median_s": 155.27287330001127,
+        "ratio": 1.6581266123834626
+      },
+      "on-hard-n30-s6": {
+        "wall_s": 425.03200249996735,
+        "config_median_s": 284.7282912500086,
+        "ratio": 1.4927635066891318
+      },
+      "on-hard-n30-s7": {
+        "wall_s": 382.7596587999724,
+        "config_median_s": 284.7282912500086,
+        "ratio": 1.344297951986395
+      },
+      "on-hard-n3000-s4": {
+        "wall_s": 466.34663469996303,
+        "config_median_s": 274.35291680000955,
+        "ratio": 1.6998056377140978
+      }
+    },
+    "suspect_rule": "snapshot flags OR wall > 1.25x same-config median (diagnostic report, not a criterion; params kept per Phase 3 precedent, suspect wall clocks must not be quoted alone)",
+    "total_wall_clock_h": 3.3284444505555926,
+    "n_runs": 60,
+    "pass": true
+  },
+  "_meta": {
+    "budget": {
+      "adam": 1500,
+      "lbfgs": 1000,
+      "num_domain": 4000
+    },
+    "n_runs": 60,
+    "arms": {
+      "off": {
+        "architecture": "fnn",
+        "adaptive": false,
+        "stage": "A"
+      },
+      "on": {
+        "architecture": "modified_mlp",
+        "adaptive": true,
+        "stage": "A"
+      },
+      "gate": {
+        "architecture": "modified_mlp",
+        "adaptive": false,
+        "stage": "B"
+      },
+      "adw": {
+        "architecture": "fnn",
+        "adaptive": true,
+        "stage": "B"
+      }
+    },
+    "collapse_def": "mu_refit < 0.008 or D_refit < 0.003",
+    "error_metric": "geometric mean of refit relative errors (mu/D/DT), median over the cell's seeds"
+  }
+}

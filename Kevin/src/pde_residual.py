@@ -28,6 +28,17 @@ def navier_stokes(X, u, v, w, p, rho, mu):
             "momentum_w": rho * (w_t + u * w_x + v * w_y + w * w_z) + grad_p[:, 2:3] - mu * w_lap}
 
 
+def heat(X, T, alpha):
+    _, _, _, T_t, T_lap = derivatives(T, X)
+    return {"energy": T_t - alpha * T_lap}
+
+
+def species_soret(X, Y, T, u, v, w, rho, D, DT):
+    Y_x, Y_y, Y_z, Y_t, Y_lap = derivatives(Y, X)
+    _, _, _, _, T_lap = derivatives(T, X)
+    return {"species": rho * (Y_t + u * Y_x + v * Y_y + w * Y_z) - D * Y_lap - DT * T_lap}
+
+
 def diffusion(X, c, D):
     _, _, _, c_t, c_lap = derivatives(c, X)
     return {"species": c_t - D * c_lap}

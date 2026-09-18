@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "leverage": {
+    "mu": 0.27888268654384907,
+    "D": 1.2525682185991744,
+    "DT": 0.6831160439569667
+  },
+  "recovered_on_exact": {
+    "mu": 0.08000000000000002,
+    "D": 0.030000000000000013,
+    "DT": 0.014999999999999958
+  },
+  "num_domain": 4000,
+  "offset": 16345,
+  "true": {
+    "mu": 0.08,
+    "D": 0.03,
+    "DT": 0.015
+  },
+  "note": "leverage of the analytic exact solution on the same fresh refit points as every run's final_refit; all run leverages are reported as a percentage of this"
+}
