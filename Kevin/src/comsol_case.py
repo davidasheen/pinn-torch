@@ -5,8 +5,8 @@ import re
 
 import numpy as np
 
-import const
-import json_util
+from . import const
+from .import json_util
 
 
 def smooth_step(s, ncontder):

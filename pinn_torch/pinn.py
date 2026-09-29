@@ -15,6 +15,14 @@ def is_iterable(obj):
     
     return
 
+class Theta(nn.Module):
+    def __init__(
+            self,
+            #specs : list,
+    ):
+        super(Theta, self).__init__()
+
+
 class PhysicsHead(nn.Module):
     def __init__(
         self,
@@ -119,7 +127,9 @@ class RadialBasisFunction(nn.Module):
             rbf_centers += [this_centers]
             #if we are creating rbf_widths, the width of the kernel function should be equal to the spacing
             #between the rbf centers
-            if create_rbf_widths: rbf_widths += [4*(this_centers[1] - this_centers[0])]
+            if create_rbf_widths:
+                width = 4*(this_centers[1] - this_centers[0]) if ncenters > 1 else 1.0
+                rbf_widths += [width if width != 0 else 1.0]
                 
         #use numpy.meshgrid to create a mesh from the RBF centers, stack the mesh into a single array, and reshape
         rbf_centers = np.stack(

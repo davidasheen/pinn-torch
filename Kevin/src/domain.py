@@ -8,8 +8,8 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 import numpy as np
 import torch
 
-import const
-import comsol_case
+from . import const
+from . import comsol_case
 
 
 def _uniform(shape, generator, dtype, device, lo=0.0, hi=1.0):
@@ -61,8 +61,8 @@ class BoxDomain:
     def __init__(self, lo, hi):
         self.lo = np.asarray(lo, dtype=float).reshape(-1)
         self.hi = np.asarray(hi, dtype=float).reshape(-1)
-        if self.lo.size != 4 or self.hi.size != 4:
-            raise ValueError("BoxDomain needs 4-entry lo/hi for (x, y, z, t)")
+        if self.lo.size != self.hi.size:
+            raise ValueError(f"lo and hi must have same size, got {self.lo.size} and {self.hi.size}")
 
     @property
     def bounds(self):
@@ -74,7 +74,7 @@ class BoxDomain:
     def sample(self, n, generator, dtype, device):
         lo = torch.as_tensor(self.lo, dtype=dtype, device=device)
         hi = torch.as_tensor(self.hi, dtype=dtype, device=device)
-        return lo + (hi - lo) * torch.rand((n, 4), generator=generator, dtype=dtype, device=device)
+        return lo + (hi - lo) * torch.rand((n, self.lo.size), generator=generator, dtype=dtype, device=device)
 
     def sample_vertices(self, n, generator, dtype, device):
         return self.sample(n, generator, dtype, device)
@@ -89,8 +89,8 @@ class BoxDomain:
             X = base.clone()
             X[:, axis] = float((self.lo if side == "lo" else self.hi)[axis])
             normal = None
-            if axis < 3:
-                normal = torch.zeros((n, 3), dtype=dtype, device=device)
+            if axis < self.lo.size - 1:
+                normal = torch.zeros((n, self.lo.size - 1), dtype=dtype, device=device)
                 normal[:, axis] = -1.0 if side == "lo" else 1.0
             out[suffix] = {"X": X, "normal": normal, "node": None}
         return out

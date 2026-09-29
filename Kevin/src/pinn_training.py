@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
 
@@ -16,13 +15,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
+from typing import Any, Dict, List, Tuple, Union, Optional, Callable
 
-import const
-import domain
-import network
+from . import const
+from . import domain
+from . import network
 
+def map_tensors(obj: Any, fn: Callable[[torch.Tensor], torch.Tensor]) -> Any:
+    """
+    Recursively applies a function to all torch tensors within a nested structure.
 
-def map_tensors(obj, fn):
+    Args:
+        obj: The object to process (tensor, dict, list, or tuple).
+        fn: The function to apply to each tensor.
+
+    Returns:
+        The object with tensors transformed by fn.
+    """
     if torch.is_tensor(obj):
         return fn(obj)
     if isinstance(obj, dict):
@@ -33,41 +42,92 @@ def map_tensors(obj, fn):
         return [map_tensors(v, fn) for v in obj]
     return obj
 
+def _short(value: Any, width: int = 90) -> str:
+    """
+    Shortens a string representation of a value for logging.
 
-def _short(value, width=90):
+    Args:
+        value: The value to shorten.
+        width: Maximum length of the resulting string.
+
+    Returns:
+        A shortened string representation.
+    """
     text = repr(value)
     return text if len(text) <= width else text[:width - 3] + "..."
 
-
 class PINNTraining:
+    """
+    Orchestrates the training of a Physics-Informed Neural Network (PINN).
+
+    Handles data splitting, collocation point sampling, optimization (Adam and L-BFGS),
+    and checkpointing for both forward and inverse problems.
+    """
+
     def __init__(
         self,
-        dataset,
-        fields=None,
-        pde=(),
-        inverse=None,
-        known=None,
-        domain=None,
-        boundary=(),
-        group=None,
-        sigma=None,
-        weights=None,
-        hidden=const.HIDDEN_LAYERS,
-        feature=None,
-        num_node=None,
-        batch_size=const.BATCH_SIZE,
-        adam_epochs=const.ADAM_EPOCHS,
-        lbfgs_iterations=const.LBFGS_ITERATIONS,
-        lbfgs_chunk=const.LBFGS_CHUNK,
-        dtype=getattr(torch, const.TRAIN_DTYPE),
-        device=None,
-        seed=const.SEED,
-        log_every=const.LOG_EVERY,
-        record_every=const.RECORD_EVERY,
-        checkpoint_path=None,
-        checkpoint_every=const.CHECKPOINT_EVERY,
-        resume="auto",
+        dataset: Dict[str, np.ndarray],
+        fields: Optional[List[str]] = None,
+        pde: Tuple[Union[Callable, Dict], ...] = (),
+        inverse: Optional[Dict[str, Union[float, Dict]]] = None,
+        known: Optional[Dict[str, float]] = None,
+        domain: domain.MeshDomain = None,
+        boundary: Tuple[Union[Callable, Dict], ...] = (),
+        group: Optional[np.ndarray] = None,
+        sigma: Optional[Dict[str, float]] = None,
+        weights: Optional[Dict[str, float]] = None,
+        hidden: Tuple[int, ...] = const.HIDDEN_LAYERS,
+        feature: Optional[Callable] = None,
+        num_node: Optional[int] = None,
+        num_domain: Optional[int] = None,
+        rar_pool: Optional[float] = None,
+        num_centers: int = 11,
+        batch_size: Optional[int] = const.BATCH_SIZE,
+        adam_epochs: int = const.ADAM_EPOCHS,
+        lbfgs_iterations: int = const.LBFGS_ITERATIONS,
+        lbfgs_chunk: int = const.LBFGS_CHUNK,
+        dtype: torch.dtype = getattr(torch, const.TRAIN_DTYPE),
+        device: Optional[str] = None,
+        seed: int = const.SEED,
+        log_every: int = const.LOG_EVERY,
+        record_every: int = const.RECORD_EVERY,
+        checkpoint_path: Optional[str] = None,
+        checkpoint_every: int = const.CHECKPOINT_EVERY,
+        resume: str = "auto",
     ):
+        """
+        Initializes the PINNTraining instance.
+
+        Args:
+            dataset: Dictionary containing 'X' and target fields.
+            fields: List of target field names. Defaults to names in dataset.
+            pde: Tuple of PDE residual specifications.
+            inverse: Dictionary of parameters to be recovered (inverse problem).
+            known: Dictionary of fixed physical parameters.
+            domain: The domain object for sampling collocation points.
+            boundary: Tuple of boundary condition specifications.
+            group: Array for guided data splitting.
+            sigma: Weighting factors for each field in the data loss.
+            weights: Weights for specific residual terms.
+            hidden: Architecture of the hidden layers.
+            feature: Optional feature encoding function.
+            num_node: Number of nodes to use in collocation.
+            num_domain: Number of collocation points to sample.
+            rar_pool: RAR sampling pool size.
+            num_centers: Number of centers for RBF encoding.
+            batch_size: Training batch size.
+            adam_epochs: Number of Adam epochs.
+            lbfgs_iterations: Maximum L-BFGS iterations.
+            lbfgs_chunk: L-BFGS checkpointing chunk size.
+            dtype: Torch dtype for training.
+            device: Computation device.
+            seed: Random seed.
+            log_every: Epoch interval for logging.
+            record_every: Epoch interval for recording history.
+            checkpoint_path: Path to save/load checkpoints.
+            checkpoint_every: Epoch interval for saving checkpoints.
+            resume: Resume mode ("auto", True, False).
+        """
         self.dataset = dataset
         self.fields = tuple(fields) if fields is not None else tuple(f for f in const.FIELD_NAMES if f in dataset)
         missing = [f for f in self.fields if f not in dataset]
@@ -98,12 +158,13 @@ class PINNTraining:
         self.group = None if group is None else np.asarray(group).reshape(-1)
         self.hidden = tuple(int(h) for h in hidden)
         self.split_pattern = const.SPLIT_PATTERN
-        self.num_domain = int(const.NUM_DOMAIN)
+        self.num_domain = int(num_domain) if num_domain is not None else int(const.NUM_DOMAIN)
         self.num_node = None if num_node is None else int(num_node)
-        self.rar_pool = float(const.RAR_POOL)
+        self.rar_pool = float(rar_pool) if rar_pool is not None else float(const.RAR_POOL)
         self.rar_chunk = const.RAR_CHUNK
         self.rar_boundary = bool(const.RAR_BOUNDARY)
         self.resample_every = int(const.RESAMPLE_EVERY)
+        self.num_centers = int(num_centers)
         self.batch_size = None if batch_size is None else int(batch_size)
         self.adam_epochs = int(adam_epochs)
         self.adam_lr = float(const.ADAM_LR)
@@ -135,7 +196,17 @@ class PINNTraining:
         self.load_data()
         self.initialize_model()
 
-    def normalize_spec(self, spec, kind):
+    def normalize_spec(self, spec: Union[Callable, Dict], kind: str) -> Dict[str, Any]:
+        """
+        Normalizes a PDE or boundary specification into a standard dictionary format.
+
+        Args:
+            spec: The specification (callable or dict).
+            kind: The type of specification ("pde" or "bc").
+
+        Returns:
+            A normalized specification dictionary.
+        """
         if callable(spec):
             spec = {"residual": spec}
         spec = dict(spec)
@@ -158,7 +229,17 @@ class PINNTraining:
         out["inputs"] = self.bind(out, kind)
         return out
 
-    def bind(self, spec, kind):
+    def bind(self, spec: Dict[str, Any], kind: str) -> Dict[str, Tuple[str, str, str]]:
+        """
+        Binds the arguments of a residual function to their data sources.
+
+        Args:
+            spec: The normalized specification.
+            kind: The type of specification ("pde" or "bc").
+
+        Returns:
+            A dictionary mapping argument names to source tuples (type, key, suffix).
+        """
         fn, name = spec["residual"], spec["name"]
         pair = kind == "bc" and spec["where"].get("side") == "pair"
         coefs = tuple(self.inverse) + tuple(self.known)
@@ -166,10 +247,18 @@ class PINNTraining:
         for pname, param in inspect.signature(fn).parameters.items():
             if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
                 raise ValueError(f"{name}: *args/**kwargs are not supported in residual functions")
+            if param.default is inspect.Parameter.empty and pname not in spec["map"]:
+                # If the parameter has no default and isn't mapped, it's a problem.
+                # But we check if it's a reserved arg first in the original code.
+                # Let's refine: if it's mapped, we map it. If it's not mapped but has a default, we skip it.
+                pass
+
             key, suffix = spec["map"].get(pname, pname), ""
             if pair and key.endswith(const.PAIR_SUFFIXES):
                 key, suffix = key[:-3], key[-3:]
-            if key in const.RESERVED_ARGS:
+            if key == "fields":
+                source = ("all_fields", key, "")
+            elif key in const.RESERVED_ARGS:
                 if kind == "pde" and key != "X":
                     raise ValueError(f"{name}: {key!r} is only available to boundary residuals")
                 source = ("extra", key, suffix)
@@ -179,6 +268,9 @@ class PINNTraining:
                 source = ("coef", key, "")
             elif key in spec["table"]:
                 source = ("table", key, "")
+            elif param.default is not inspect.Parameter.empty:
+                # Skip arguments with default values that aren't mapped
+                continue
             else:
                 raise ValueError(f"{name}: argument {pname!r} (as {key!r}) is not a field {self.fields}, "
                                  f"a coefficient {coefs}, a table {tuple(spec['table'])}, or one of {const.RESERVED_ARGS}"
@@ -188,7 +280,16 @@ class PINNTraining:
             inputs[pname] = source
         return inputs
 
-    def describe_spec(self, spec):
+    def describe_spec(self, spec: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Provides a human-readable description of a specification.
+
+        Args:
+            spec: The specification to describe.
+
+        Returns:
+            A description dictionary.
+        """
         out = {"name": spec["name"], "function": getattr(spec["residual"], "__qualname__", repr(spec["residual"])),
                "map": spec["map"], "inputs": {p: f"{kind}:{key}{suffix}" for p, (kind, key, suffix) in spec["inputs"].items()},
                "outputs": list(spec.get("outputs", [])), "scale": spec["scale"], "weight": spec["weight"],
@@ -200,7 +301,18 @@ class PINNTraining:
         return out
 
     @staticmethod
-    def split_index(n, pattern, group=None):
+    def split_index(n: int, pattern: Tuple[int, ...], group: Optional[np.ndarray] = None) -> Tuple[np.ndarray, ...]:
+        """
+        Calculates indices for splitting data based on a pattern.
+
+        Args:
+            n: Total number of samples.
+            pattern: Split ratio (e.g., 8:1:1).
+            group: Optional array for guided splitting.
+
+        Returns:
+            A tuple of index arrays for each split.
+        """
         pattern = tuple(int(v) for v in pattern)
         if len(pattern) != 3 or min(pattern) < 1:
             raise ValueError(f"pattern must be three positive ints, got {pattern!r}")
@@ -214,7 +326,8 @@ class PINNTraining:
                             np.cumsum(pattern)[:-1])[inv.reshape(-1)]
         return tuple(np.flatnonzero(label == i) for i in range(3))
 
-    def split_data(self):
+    def split_data(self) -> None:
+        """Splits the dataset into training, validation, and test sets."""
         self.split_pattern = tuple(int(v) for v in self.split_pattern)
         n = int(np.shape(self.dataset["X"])[0])
         splits = []
@@ -225,24 +338,68 @@ class PINNTraining:
                            for k, v in self.dataset.items()})
         self.train_data, self.valid_data, self.test_data = splits
 
-    def to_torch(self, d):
+    def to_torch(self, d: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+        """
+        Converts a numpy-based dataset dictionary to torch tensors.
+
+        Args:
+            d: Dataset dictionary.
+
+        Returns:
+            Dictionary of torch tensors.
+        """
         out = {"X": torch.as_tensor(np.asarray(d["X"], dtype=float), dtype=self.dtype, device=self.device)}
         for f in self.fields:
             out[f] = torch.as_tensor(np.asarray(d[f], dtype=float).reshape(-1, 1), dtype=self.dtype, device=self.device)
         return out
 
-    def split_counts(self, n):
+    def split_counts(self, n: int) -> Dict[str, int]:
+        """
+        Returns the number of samples in each split.
+
+        Args:
+            n: Total samples.
+
+        Returns:
+            Dictionary of split counts.
+        """
         return {s: int(rows.size) for s, rows in zip(const.SPLITS, self.split_index(n, self.split_pattern))}
 
-    def rar_score(self, coords):
-        res = self.residual_pde(coords, self.fields_of(self.model(coords)))
-        return sum((r.detach() / self.term_scale[k]) ** 2 for k, r in res.items()).flatten()
+    def rar_score(self, coords: torch.Tensor) -> torch.Tensor:
+        """
+        Computes the residual score for RAR sampling.
 
-    def bc_score(self, spec, pieces):
+        Args:
+            coords: Coordinate tensor.
+
+        Returns:
+            Score tensor.
+        """
+        coords_list = [coords[:, i:i+1] for i in range(coords.shape[1])]
+        res = self.residual_pde(coords_list, self.fields_of(self.model(coords_list)))
+        score = sum((r.detach() / self.term_scale[k]) ** 2 for k, r in res.items()).flatten()
+        if torch.isnan(score).any() or torch.isinf(score).any():
+            print(f"RAR score contains nan/inf. Terms: {list(res.keys())}")
+            for k, r in res.items():
+                print(f"  {k}: min={r.min().item():.2e}, max={r.max().item():.2e}, mean={r.mean().item():.2e}")
+        return score
+
+    def bc_score(self, spec: Dict[str, Any], pieces: Any) -> torch.Tensor:
+        """
+        Computes the residual score for boundary condition RAR sampling.
+
+        Args:
+            spec: Boundary specification.
+            pieces: Sampled boundary coordinates.
+
+        Returns:
+            Score tensor.
+        """
         res = self.residual_pieces(spec, pieces)
         return sum(((r.detach() / self.term_scale[k]) ** 2).sum(dim=1) for k, r in res.items()).flatten()
 
-    def sample_fixed(self):
+    def sample_fixed(self) -> None:
+        """Samples fixed collocation points for validation and test sets."""
         g = self.valid_generator
         self.colloc = {s: torch.cat([self.domain.sample_vertices(self.n_node[s], g, self.dtype, self.device),
                                      self.domain.sample(self.target_n[s], g, self.dtype, self.device)]).detach()
@@ -255,7 +412,8 @@ class PINNTraining:
                 pieces = self.domain.sample_boundary(spec["where"], spec["n"][s], g, self.dtype, self.device)
                 spec["colloc"][s] = map_tensors(pieces, lambda x: x.detach())
 
-    def resample(self):
+    def resample(self) -> None:
+        """Performs RAR-based collocation sampling for the training set."""
         if self.colloc is None:
             self.sample_fixed()
         n = self.target_n["train"]
@@ -292,7 +450,8 @@ class PINNTraining:
             spec["colloc_batch"]["train"] = [map_tensors(spec["colloc"]["train"], lambda x, i=b: x.tensor_split(self.n_batch)[i])
                                              for b in range(self.n_batch)]
 
-    def load_data(self):
+    def load_data(self) -> None:
+        """Splits and loads the dataset into torch tensors."""
         self.split_data()
         self.train_torch = self.to_torch(self.train_data)
         self.valid_torch = self.to_torch(self.valid_data)
@@ -314,12 +473,14 @@ class PINNTraining:
         self.colloc, self.colloc_batch = None, {}
 
     @staticmethod
-    def set_determinism(enabled):
+    def set_determinism(enabled: bool) -> None:
+        """Sets torch and cudnn to deterministic mode."""
         torch.use_deterministic_algorithms(bool(enabled))
         torch.backends.cudnn.deterministic = bool(enabled)
         torch.backends.cudnn.benchmark = not enabled
 
-    def initialize_model(self):
+    def initialize_model(self) -> None:
+        """Initializes the network, optimizer, and training configuration."""
         self.set_determinism(self.deterministic)
         torch.manual_seed(self.seed)
         self.generator = torch.Generator(device=self.device).manual_seed(self.seed + const.SEED_OFFSET_COLLOCATION)
@@ -334,7 +495,7 @@ class PINNTraining:
                                else torch.as_tensor(v, device=self.device) for k, v in spec["table"].items()}
         self.n_param = int(getattr(self.domain, "n_param", 0))
         self.model = network.PINN(self.layers, self.bounds[0], self.bounds[1], feature=self.feature,
-                                  n_feature=self.n_feature, n_param=self.n_param).to(device=self.device, dtype=self.dtype)
+                                  n_feature=self.n_feature, n_param=self.n_param, num_centers=self.num_centers).to(device=self.device, dtype=self.dtype)
         self.theta = network.Theta(self.inverse).to(device=self.device, dtype=self.dtype) if self.inverse else None
         groups = [{"params": list(self.model.parameters()), "lr": self.adam_lr}]
         if self.theta is not None:
@@ -386,7 +547,8 @@ class PINNTraining:
                 raise ValueError(f"checkpoint {self.checkpoint_path} does not match this run "
                                  f"(pass resume='auto' to retrain or resume=False):\n  " + "\n  ".join(stale))
 
-    def data_sha(self):
+    def data_sha(self) -> str:
+        """Computes a SHA-256 fingerprint of the training data."""
         h = hashlib.sha256()
         for k in ("X", *self.fields):
             h.update(np.ascontiguousarray(np.asarray(self.dataset[k], dtype=float)).tobytes())
@@ -395,11 +557,13 @@ class PINNTraining:
         return h.hexdigest()[:16]
 
     @staticmethod
-    def fingerprint(config):
+    def fingerprint(config: Dict[str, Any]) -> str:
+        """Computes a SHA-256 fingerprint of the training configuration."""
         subset = {k: config.get(k) for k in const.FINGERPRINT_KEYS}
         return hashlib.sha256(json.dumps(subset, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
-    def checkpoint_diff(self, ck):
+    def checkpoint_diff(self, ck: Dict[str, Any]) -> List[str]:
+        """Compares the current configuration with a checkpoint configuration."""
         cfg = ck.get("config") or {}
         if "fingerprint" not in cfg:
             return ["checkpoint predates fingerprints (old format)"]
@@ -409,7 +573,8 @@ class PINNTraining:
                  for key in const.FINGERPRINT_KEYS if cfg.get(key) != self.config.get(key)]
         return diffs or ["fingerprint differs"]
 
-    def describe_feature(self):
+    def describe_feature(self) -> Optional[Dict[str, Any]]:
+        """Provides a description and fingerprint of the feature encoding function."""
         if self.feature is None:
             return None
         digest = getattr(self.feature, "digest", None)
@@ -423,15 +588,19 @@ class PINNTraining:
         return {"name": getattr(self.feature, "__name__", type(self.feature).__name__), "n": self.n_feature,
                 "sha": sha}
 
-    def dry_run(self):
+    def dry_run(self) -> None:
+        """
+        Performs a single forward pass to verify residual shapes and register terms.
+        """
         g = torch.Generator(device=self.device).manual_seed(const.SEED_DRY_RUN)
         n = const.DRY_RUN_POINTS
         self.pde_terms, self.bc_terms, self.term_scale, self.term_weight = [], [], {}, {}
         with torch.enable_grad():
-            X = self.domain.sample(n, g, self.dtype, self.device).requires_grad_(True)
-            y = self.fields_of(self.model(X))
+            X_tensor = self.domain.sample(n, g, self.dtype, self.device).requires_grad_(True)
+            X_list = [X_tensor[:, i:i+1] for i in range(X_tensor.shape[1])]
+            y = self.fields_of(self.model(X_list))
             for spec in self.pde:
-                self.finish_spec(spec, self.call_residual(spec, {"": {"X": X, "y": y, "normal": None, "node": None,
+                self.finish_spec(spec, self.call_residual(spec, {"": {"X": X_list, "y": y, "normal": None, "node": None,
                                                                       "segment": None}}),
                                  self.pde_terms)
             for spec in self.boundary:
@@ -446,7 +615,15 @@ class PINNTraining:
             raise ValueError(f"weights for unknown terms {unknown}; terms are {names}")
         self.term_weight["data"] = self.weights.get("data", 1.0)
 
-    def finish_spec(self, spec, res, register):
+    def finish_spec(self, spec: Dict[str, Any], res: Dict[str, torch.Tensor], register: List[str]) -> None:
+        """
+        Registers a residual's output terms and their scaling/weighting.
+
+        Args:
+            spec: The residual specification.
+            res: The computed residuals.
+            register: The list to which term names are added.
+        """
         spec["outputs"] = list(res)
         for k, r in res.items():
             if not torch.is_tensor(r) or r.ndim != 2:
@@ -459,10 +636,17 @@ class PINNTraining:
             register.append(k)
 
     @property
-    def all_params(self):
+    def all_params(self) -> List[torch.Tensor]:
+        """Returns a list of all optimizable parameters (network weights and inverse params)."""
         return list(self.model.parameters()) + ([] if self.theta is None else list(self.theta.parameters()))
 
-    def cast(self, new_dtype):
+    def cast(self, new_dtype: torch.dtype) -> None:
+        """
+        Casts the model and all stored tensors to a new dtype.
+
+        Args:
+            new_dtype: The target torch dtype.
+        """
         self.dtype = new_dtype
         self.model.to(dtype=new_dtype)
         if self.theta is not None:
@@ -479,15 +663,26 @@ class PINNTraining:
         for spec in (*self.pde, *self.boundary):
             spec["table_t"] = map_tensors(spec["table_t"], lambda x: x.to(new_dtype) if x.is_floating_point() else x)
 
-    def coef(self, name):
+    def coef(self, name: str) -> torch.Tensor:
+        """
+        Retrieves the value of a physical parameter.
+
+        Args:
+            name: The name of the parameter.
+
+        Returns:
+            The current value as a torch tensor.
+        """
         if self.theta is not None and name in self.theta.names:
             return self.theta.value(name)
         return self.known[name]
 
-    def param_values(self):
+    def param_values(self) -> Dict[str, float]:
+        """Returns the current values of all inverse parameters."""
         return {} if self.theta is None else self.theta.values()
 
-    def pinned_params(self):
+    def pinned_params(self) -> List[str]:
+        """Returns a list of inverse parameters that have hit their search bounds."""
         if self.theta is None or not self.lbfgs_bound_tol:
             return []
         frac = self.theta.fractions()
@@ -495,7 +690,20 @@ class PINNTraining:
                 if f is not None and min(f, 1.0 - f) < self.lbfgs_bound_tol]
 
     @staticmethod
-    def tail_estimate(history, names=None, fraction=const.LBFGS_TAIL_FRACTION, chunk=const.LBFGS_CHUNK):
+    def tail_estimate(history: Dict[str, List[float]], names: Optional[List[str]] = None,
+                      fraction: float = const.LBFGS_TAIL_FRACTION, chunk: int = const.LBFGS_CHUNK) -> Optional[Dict[str, Any]]:
+        """
+        Computes a statistical estimate of parameters based on the tail of the L-BFGS history.
+
+        Args:
+            history: The training history dictionary.
+            names: Optional list of parameters to estimate.
+            fraction: The fraction of the L-BFGS phase to consider as the tail.
+            chunk: Chunk size for SEM calculation.
+
+        Returns:
+            A dictionary of estimates (median, SD, SEM, etc.) or None.
+        """
         names = list(names) if names is not None else [k for k in history if k not in const.HISTORY_KEYS]
         phase = np.asarray(history.get("phase", []))
         mask = phase == "lbfgs"
@@ -520,7 +728,17 @@ class PINNTraining:
         return out
 
     @staticmethod
-    def scale_estimate(est, scale):
+    def scale_estimate(est: Optional[Dict[str, Any]], scale: Dict[str, float]) -> Dict[str, Any]:
+        """
+        Scales the parameter estimates by the provided scale factors.
+
+        Args:
+            est: The estimate dictionary.
+            scale: Scaling factors for each parameter.
+
+        Returns:
+            A dictionary of scaled estimates.
+        """
         if est is None:
             return {}
         return {k: {"value": est["params"][k] * scale[k], "sd": est["sd"][k] * scale[k],
@@ -528,12 +746,36 @@ class PINNTraining:
                     "p84": est["p84"][k] * scale[k], "drift": est["drift"][k] * scale[k]}
                 for k in est["params"]}
 
-    def fields_of(self, y):
+    def fields_of(self, y: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """
+        Splits the network output tensor into a dictionary of named fields.
+
+        Args:
+            y: The output tensor of the model.
+
+        Returns:
+            Dictionary mapping field names to tensors.
+        """
         return {f: y[:, i:i + 1] for i, f in enumerate(self.fields)}
 
-    def call_residual(self, spec, pieces, prefix=False):
+    def call_residual(self, spec: Dict[str, Any], pieces: Dict[str, Any], prefix: bool = False) -> Dict[str, torch.Tensor]:
+        """
+        Calls a residual function with arguments bound from the specification.
+
+        Args:
+            spec: The normalized residual specification.
+            pieces: Coordinate and field data for the current point/batch.
+            prefix: Whether to prefix residual names with the spec name.
+
+        Returns:
+            A dictionary of computed residuals.
+        """
         kwargs = {}
         for pname, (kind, key, suffix) in spec["inputs"].items():
+            if kind == "all_fields":
+                # Provide all output fields as a dictionary
+                kwargs[pname] = {f: piece["y"][f] for f in self.fields}
+                continue
             if kind == "coef":
                 kwargs[pname] = self.coef(key)
                 continue
@@ -549,6 +791,8 @@ class PINNTraining:
                     raise ValueError(f"{spec['name']}: {key!r} is not available on this boundary "
                                      "(normal needs a mesh face or a spatial box face, node needs a time face of MeshDomain, "
                                      "segment needs a time face of a MeshDomain built with s_values)")
+                if key == "X" and torch.is_tensor(value) and value.ndim == 2:
+                    value = [value[:, i:i+1] for i in range(value.shape[1])]
                 kwargs[pname] = value
         r = spec["residual"](**kwargs)
         if isinstance(r, dict):
@@ -557,14 +801,34 @@ class PINNTraining:
             r = torch.cat(list(r), dim=1)
         return {spec["name"]: r}
 
-    def residual_pde(self, coords, y):
+    def residual_pde(self, coords: Union[torch.Tensor, List[torch.Tensor]], y: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Computes all PDE residuals for a given set of coordinates.
+
+        Args:
+            coords: Coordinate tensor or list of coordinate tensors.
+            y: Dictionary of field tensors.
+
+        Returns:
+            Dictionary of all PDE residuals.
+        """
         res = {}
         pieces = {"": {"X": coords, "y": y, "normal": None, "node": None, "segment": None}}
         for spec in self.pde:
             res.update(self.call_residual(spec, pieces))
         return res
 
-    def residual_pieces(self, spec, pieces):
+    def residual_pieces(self, spec: Dict[str, Any], pieces: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+        """
+        Computes residuals for a specific boundary piece.
+
+        Args:
+            spec: The boundary specification.
+            pieces: A dictionary of boundary pieces.
+
+        Returns:
+            Dictionary of computed residuals.
+        """
         live = {}
         for suffix, piece in pieces.items():
             X = piece["X"].clone().requires_grad_(True)
@@ -572,16 +836,40 @@ class PINNTraining:
                             "segment": piece.get("segment")}
         return self.call_residual(spec, live, prefix=True)
 
-    def residual_bc(self, spec, split, bidx=None):
+    def residual_bc(self, spec: Dict[str, Any], split: str, bidx: Optional[int] = None) -> Dict[str, torch.Tensor]:
+        """
+        Computes boundary residuals for a specific split.
+
+        Args:
+            spec: The boundary specification.
+            split: The split to evaluate ("train", "valid", "test").
+            bidx: Optional batch index.
+
+        Returns:
+            Dictionary of computed residuals.
+        """
         pieces = spec["colloc"][split] if bidx is None else spec["colloc_batch"][split][bidx]
         return self.residual_pieces(spec, pieces)
 
-    def loss(self, data, colloc, split, bidx=None):
+    def loss(self, data: Dict[str, Any], colloc: torch.Tensor, split: str, bidx: Optional[int] = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """
+        Computes the total PINN loss (Data + PDE + BC).
+
+        Args:
+            data: Data dictionary.
+            colloc: Collocation points.
+            split: The current split.
+            bidx: Optional batch index.
+
+        Returns:
+            A tuple containing the total loss and a dictionary of individual term losses.
+        """
         n = data["X"].shape[0]
-        coords = torch.cat([data["X"], colloc], dim=0).detach().requires_grad_(True)
-        y = self.fields_of(self.model(coords))
+        coords_tensor = torch.cat([data["X"], colloc], dim=0).detach().requires_grad_(True)
+        coords_list = [coords_tensor[:, i:i+1] for i in range(coords_tensor.shape[1])]
+        y = self.fields_of(self.model(coords_list))
         terms = {"data": sum(torch.mean(((y[f][:n] - data[f]) / self.sigma[f]) ** 2) for f in self.fields) / len(self.fields)}
-        for k, r in self.residual_pde(coords, y).items():
+        for k, r in self.residual_pde(coords_list, y).items():
             terms[k] = torch.mean((r / self.term_scale[k]) ** 2)
         for spec in self.boundary:
             for k, r in self.residual_bc(spec, split, bidx).items():
@@ -590,13 +878,30 @@ class PINNTraining:
         total = self.term_weight["data"] * terms["data"] + self.pde_weight * model_part
         return total, terms
 
-    def term_parts(self, terms):
+    def term_parts(self, terms: Dict[str, torch.Tensor]) -> Tuple[float, float, float]:
+        """
+        Splits the total loss into data, PDE, and BC components.
+
+        Args:
+            terms: Dictionary of individual term losses.
+
+        Returns:
+            Tuple of (data_loss, pde_loss, bc_loss).
+        """
         data = self.term_weight["data"] * float(terms["data"].detach())
         pde = self.pde_weight * sum(self.term_weight[k] * float(terms[k].detach()) for k in self.pde_terms)
         bc = self.pde_weight * sum(self.term_weight[k] * float(terms[k].detach()) for k in self.bc_terms)
         return data, pde, bc
 
-    def record(self, phase, total, terms):
+    def record(self, phase: str, total: torch.Tensor, terms: Dict[str, torch.Tensor]) -> None:
+        """
+        Records training metrics in the history.
+
+        Args:
+            phase: The current training phase ("adam" or "lbfgs").
+            total: The total loss.
+            terms: Dictionary of individual term losses.
+        """
         with torch.enable_grad():
             v_total, v_terms = self.loss(self.valid_torch, self.colloc["valid"], "valid")
         vt = float(v_total.detach())
@@ -620,7 +925,15 @@ class PINNTraining:
         for k, v in self.param_values().items():
             self.history[k].append(v)
 
-    def show(self, phase, total, terms):
+    def show(self, phase: str, total: torch.Tensor, terms: Dict[str, torch.Tensor]) -> None:
+        """
+        Prints the current training status to the console.
+
+        Args:
+            phase: The current training phase.
+            total: The total loss.
+            terms: Dictionary of individual term losses.
+        """
         td, tp, tb = self.term_parts(terms)
         msg = f"[{phase}] epoch {self.epoch:6d}"
         if self.n_batch > 1:
@@ -633,7 +946,15 @@ class PINNTraining:
         msg += f"  elapsed={time.perf_counter() - self.t_construct:.0f}s"
         print(msg, flush=True)
 
-    def maybe_log(self, phase, total=None, terms=None):
+    def maybe_log(self, phase: str, total: Optional[torch.Tensor] = None, terms: Optional[Dict[str, torch.Tensor]] = None) -> None:
+        """
+        Conditionally logs and records training status.
+
+        Args:
+            phase: The current training phase.
+            total: The total loss.
+            terms: Dictionary of individual term losses.
+        """
         do_record = self.record_every and self.epoch % self.record_every == 0
         do_show = self.log_every and self.epoch % self.log_every == 0
         if not (do_record or do_show):
@@ -646,7 +967,16 @@ class PINNTraining:
         if do_show:
             self.show(phase, total, terms)
 
-    def save_checkpoint(self, adam_epoch, adam_done, lbfgs_done, optimizer_state=None):
+    def save_checkpoint(self, adam_epoch: int, adam_done: bool, lbfgs_done: bool, optimizer_state: Optional[Dict] = None) -> None:
+        """
+        Saves the training state to a checkpoint file.
+
+        Args:
+            adam_epoch: Current Adam epoch.
+            adam_done: Whether Adam phase is complete.
+            lbfgs_done: Whether L-BFGS phase is complete.
+            optimizer_state: Current state of the optimizer.
+        """
         if self.checkpoint_path is None:
             return
         self.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
@@ -670,7 +1000,13 @@ class PINNTraining:
                                     "bc_colloc": [map_tensors(spec["colloc"], to_cpu) if "colloc" in spec else None
                                                   for spec in self.boundary]}}, self.checkpoint_path)
 
-    def resume_from_checkpoint(self, ck):
+    def resume_from_checkpoint(self, ck: Dict[str, Any]) -> None:
+        """
+        Restores the training state from a checkpoint.
+
+        Args:
+            ck: The checkpoint dictionary.
+        """
         ts = ck["train_state"]
         self.adam_epoch, self.adam_done, self.lbfgs_done = ts["adam_epoch"], ts["adam_done"], ts["lbfgs_done"]
         self.epoch, self.iteration = int(ts["epoch"]), int(ts["iteration"])
@@ -703,20 +1039,34 @@ class PINNTraining:
                   f"adam_done={self.adam_done} lbfgs_done={self.lbfgs_done}", flush=True)
 
     @staticmethod
-    def load_checkpoint(path, device=None, feature=None):
-        device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-        state = torch.load(path, map_location=device, weights_only=False)
+    def load_checkpoint(path: str, device: Optional[str] = None, feature: Optional[Callable] = None) -> Tuple[nn.Module, Dict[str, Any]]:
+        """
+        Loads a trained model and its state from a checkpoint file.
+
+        Args:
+            path: Path to the checkpoint.
+            device: Computation device.
+            feature: Feature encoding function used during training.
+
+        Returns:
+            A tuple of (trained_model, checkpoint_dictionary).
+        """
+        torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        state = torch.load(path, map_location=torch_device, weights_only=False)
         lo, hi = state["config"]["bounds"]
         described = state["config"].get("feature")
         if (described is None) != (feature is None):
             raise ValueError(f"checkpoint {path} was trained with feature={described}; pass the same feature callable")
         model = network.PINN(state["layers"], lo, hi, feature=feature, n_feature=0 if described is None else described["n"],
-                             n_param=state.get("n_param", 0)).to(device=device, dtype=getattr(torch, state["dtype"]))
+                             n_param=state.get("n_param", 0)).to(device=torch_device, dtype=getattr(torch, state["dtype"]))
         model.load_state_dict(state["model_state_dict"])
         model.eval()
         return model, state
 
-    def train_adam(self):
+    def train_adam(self) -> None:
+        """
+        Executes the Adam optimization phase.
+        """
         if self.colloc is None or "train" not in self.colloc_batch:
             self.resample()
         n_train = self.train_torch["X"].shape[0]
@@ -753,7 +1103,10 @@ class PINNTraining:
         self.adam_epoch, self.adam_done = self.adam_epochs, True
         self.save_checkpoint(self.adam_epochs, True, False)
 
-    def train_lbfgs(self):
+    def train_lbfgs(self) -> None:
+        """
+        Executes the L-BFGS optimization phase.
+        """
         if self.lbfgs_dtype != self.dtype:
             self.cast(self.lbfgs_dtype)
             if self.log_every:
@@ -836,7 +1189,13 @@ class PINNTraining:
                                   for k in est["params"]), flush=True)
         self.lbfgs_done = True
 
-    def restore_best_snapshot(self):
+    def restore_best_snapshot(self) -> bool:
+        """
+        Restores the model and parameters to the best state recorded during validation.
+
+        Returns:
+            True if a snapshot was restored, False otherwise.
+        """
         if self.best["state"] is None:
             return False
         self.model.load_state_dict({k: v.to(dtype=self.dtype, device=self.device)
@@ -849,7 +1208,13 @@ class PINNTraining:
                   f"val_total={self.best['val']:.4e}", flush=True)
         return True
 
-    def train(self):
+    def train(self) -> Dict[str, Any]:
+        """
+        Orchestrates the complete training pipeline (Adam -> L-BFGS -> Best Restore).
+
+        Returns:
+            A result dictionary containing the trained model, parameters, and history.
+        """
         t_start = time.perf_counter()
         if not self.adam_done:
             self.train_adam()
@@ -884,7 +1249,18 @@ class PINNTraining:
         return self.result
 
     @staticmethod
-    def evaluation(model, coords, fields):
+    def evaluation(model: nn.Module, coords: np.ndarray, fields: List[str]) -> Dict[str, np.ndarray]:
+        """
+        Performs inference using a trained model.
+
+        Args:
+            model: The trained PINN model.
+            coords: Coordinate array.
+            fields: List of field names to evaluate.
+
+        Returns:
+            Dictionary mapping field names to predicted values.
+        """
         param = next(model.parameters())
         coords = np.asarray(coords, dtype=float)
         with torch.no_grad():
@@ -892,10 +1268,28 @@ class PINNTraining:
         y = y.detach().cpu().numpy()
         return {name: y[:, i] for i, name in enumerate(fields)}
 
-    def evaluate(self, coords):
+    def evaluate(self, coords: np.ndarray) -> Dict[str, np.ndarray]:
+        """
+        Evaluates the model at the given coordinates.
+
+        Args:
+            coords: Coordinate array.
+
+        Returns:
+            Dictionary of predicted field values.
+        """
         return self.evaluation(self.model, coords, self.fields)
 
-    def evaluate_residual(self, split):
+    def evaluate_residual(self, split: str) -> Dict[str, np.ndarray]:
+        """
+        Computes the PDE residuals for a given data split.
+
+        Args:
+            split: The split to evaluate ("train", "valid", "test").
+
+        Returns:
+            Dictionary of residuals.
+        """
         if self.colloc is None:
             self.resample()
         with torch.enable_grad():
@@ -908,7 +1302,17 @@ class PINNTraining:
         return out
 
     @staticmethod
-    def error_record(y, yhat):
+    def error_record(y: np.ndarray, yhat: np.ndarray) -> Dict[str, Any]:
+        """
+        Computes error metrics between true and predicted values.
+
+        Args:
+            y: True values.
+            yhat: Predicted values.
+
+        Returns:
+            Dictionary of error metrics (RMSE, R2, etc.).
+        """
         y = np.asarray(y, float).ravel()
         yhat = np.asarray(yhat, float).ravel()
         if y.size == 0:
@@ -923,29 +1327,78 @@ class PINNTraining:
                 "r2": (1.0 - float(np.sum(resid ** 2)) / ss_tot) if ss_tot > 0 else None,
                 "computed": y.tolist(), "predicted": yhat.tolist()}
 
-    def diag_record(self, split="test"):
+    def diag_record(self, split: str = "test") -> Dict[str, Dict[str, Any]]:
+        """
+        Generates diagnostic error records for all fields.
+
+        Args:
+            split: The split to evaluate.
+
+        Returns:
+            Dictionary mapping field names to error records.
+        """
         data = {"train": self.train_data, "valid": self.valid_data, "test": self.test_data}[split]
         pred = self.evaluate(data["X"])
         return {f: self.error_record(data[f], pred[f]) for f in self.fields if f in data}
 
     @staticmethod
-    def finish(fig, path=None):
+    def finish(fig: plt.Figure, path: Optional[str] = None) -> None:
+        """
+        Saves and/or displays a matplotlib figure.
+
+        Args:
+            fig: The figure to finish.
+            path: Optional path to save the figure.
+        """
         if path is not None:
             fig.savefig(path)
         if plt.get_backend().lower() != "agg":
             plt.show()
 
     @staticmethod
-    def history_axis(history):
+    def history_axis(history: Dict[str, List[float]]) -> Tuple[np.ndarray, str]:
+        """
+        Determines the x-axis (epoch or iteration) for history plots.
+
+        Args:
+            history: The training history.
+
+        Returns:
+            Tuple of (axis_values, axis_label).
+        """
         key = "epoch" if "epoch" in history else "iteration"
         return np.asarray(history[key]), key
 
     @staticmethod
-    def best_axis(best):
+    def best_axis(best: Dict[str, Any]) -> Optional[Union[int, float]]:
+        """
+        Retrieves the axis value at which the best validation loss occurred.
+
+        Args:
+            best: The best state dictionary.
+
+        Returns:
+            The epoch or iteration of the best state.
+        """
         return None if not best else best.get("epoch", best.get("iteration"))
 
     @staticmethod
-    def plot_loss(history, path=None, title="Loss history", best_epoch=None, ax=None):
+    def plot_loss(history: Dict[str, List[float]], path: Optional[str] = None,
+                  title: str = "Loss history", best_epoch: Optional[int] = None,
+                  ax: Optional[plt.Axes] = None) -> plt.Axes:
+        """
+        Plots the training and validation loss history.
+
+        Args:
+            history: Training history.
+            path: Optional path to save the plot.
+            title: Plot title.
+            best_epoch: Epoch of the best validation loss.
+            ax: Optional existing axes to plot on.
+
+        Returns:
+            The axes used for plotting.
+        """
         own = ax is None
         if own:
             fig, ax = plt.subplots()
@@ -967,8 +1420,27 @@ class PINNTraining:
         return ax
 
     @staticmethod
-    def plot_diag(records, fields, grid=None, path=None, title="Test diagonal", band=const.DIAG_BAND,
-                  units=None, axes=None):
+    def plot_diag(records: Dict[str, Dict[str, Any]], fields: List[str],
+                  grid: Optional[Tuple[int, int]] = None, path: Optional[str] = None,
+                  title: str = "Test diagonal", band: float = const.DIAG_BAND,
+                  units: Optional[Dict[str, Tuple[str, float]]] = None,
+                  axes: Optional[plt.Axes] = None) -> plt.Axes:
+        """
+        Plots diagnostic scatter plots (True vs Predicted) for all fields.
+
+        Args:
+            records: Error records dictionary.
+            fields: List of field names.
+            grid: Grid layout (rows, cols).
+            path: Optional path to save the plot.
+            title: Plot title.
+            band: Relative error band width.
+            units: Dictionary of units and scales for fields.
+            axes: Optional existing axes.
+
+        Returns:
+            The axes used for plotting.
+        """
         own = axes is None
         if own:
             nrows, ncols = grid or (1, len(fields))
@@ -1015,7 +1487,17 @@ class PINNTraining:
         return axes
 
     @staticmethod
-    def residual_stats(resid, whiskers=(5, 95)):
+    def residual_stats(resid: Dict[str, torch.Tensor], whiskers: Tuple[int, int] = (5, 95)) -> Dict[str, Dict[str, float]]:
+        """
+        Computes statistics (median, quartiles, whiskers) for residuals.
+
+        Args:
+            resid: Dictionary of residuals.
+            whiskers: Percentiles for the whiskers.
+
+        Returns:
+            Dictionary of statistics for each residual.
+        """
         out = {}
         for k, r in resid.items():
             a = np.abs(np.asarray(r, float)).ravel()
@@ -1026,7 +1508,19 @@ class PINNTraining:
         return out
 
     @staticmethod
-    def plot_residual(residual, path=None, title="Collocation residual", ax=None):
+    def plot_residual(residual: Dict[str, torch.Tensor], path: Optional[str] = None, title: str = "Collocation residual", ax: Optional[plt.Axes] = None) -> plt.Axes:
+        """
+        Plots the distribution of residuals using boxplots.
+
+        Args:
+            residual: Dictionary of residuals.
+            path: Optional path to save the plot.
+            title: Plot title.
+            ax: Optional existing axes.
+
+        Returns:
+            The axes used for plotting.
+        """
         own = ax is None
         if own:
             fig, ax = plt.subplots()
@@ -1056,8 +1550,28 @@ class PINNTraining:
         return ax
 
     @staticmethod
-    def plot_params(history, params=None, true=None, path=None, title="Inverse parameters",
-                    best_epoch=None, estimate=None, axes=None, label=None):
+    def plot_params(history: Dict[str, List[float]], params: Optional[Dict[str, float]] = None,
+                   true: Optional[Dict[str, float]] = None, path: Optional[str] = None,
+                   title: str = "Inverse parameters", best_epoch: Optional[int] = None,
+                   estimate: Optional[Dict[str, Any]] = None, axes: Optional[plt.Axes] = None,
+                   label: Optional[str] = None) -> plt.Axes:
+        """
+        Plots the recovery of inverse parameters over the training history.
+
+        Args:
+            history: Training history.
+            params: Final recovered parameters.
+            true: True physical parameter values.
+            path: Optional path to save the plot.
+            title: Plot title.
+            best_epoch: Epoch of the best validation loss.
+            estimate: Tail estimate dictionary.
+            axes: Optional existing axes.
+            label: Label for the recovered parameter line.
+
+        Returns:
+            The axes used for plotting.
+        """
         names = list(params) if params is not None else [k for k in history if k not in const.HISTORY_KEYS]
         reported = ({k: v["value"] for k, v in estimate.items()} if estimate
                     else params if isinstance(params, dict) else {})

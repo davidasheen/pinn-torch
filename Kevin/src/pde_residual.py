@@ -1,49 +1,181 @@
 from __future__ import annotations
 
 import os
-
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import torch
+from typing import Dict, List, Union
+import pinn_torch.differentiation as diff
 
+def navier_stokes(
+    X: List[torch.Tensor],
+    fields: Dict[str, torch.Tensor],
+    p: torch.Tensor,
+    rho: Union[float, torch.Tensor],
+    mu: Union[float, torch.Tensor],
+    spatial_dims: int = 3
+) -> Dict[str, torch.Tensor]:
+    """
+    Computes the residuals for the incompressible Navier-Stokes equations.
 
-def grad(f, coords):
-    return torch.autograd.grad(f, coords, grad_outputs=torch.ones_like(f), create_graph=True)[0]
+    This implementation is agnostic to dimensionality, supporting both 2D and 3D
+    spatial domains with a temporal dimension.
 
+    Args:
+        X: List of coordinate tensors [x, y, (z), t].
+        fields: Dictionary containing the velocity fields (e.g., {'u': ..., 'v': ..., 'w': ...}).
+        p: Pressure field tensor.
+        rho: Fluid density (scalar or tensor).
+        mu: Dynamic viscosity (scalar or tensor).
+        spatial_dims: Number of spatial dimensions. Used to compute the Laplacian.
 
-def derivatives(f, coords):
-    g = grad(f, coords)
-    lap = grad(g[:, 0:1], coords)[:, 0:1] + grad(g[:, 1:2], coords)[:, 1:2] + grad(g[:, 2:3], coords)[:, 2:3]
-    return g[:, 0:1], g[:, 1:2], g[:, 2:3], g[:, 3:4], lap
+    Returns:
+        A dictionary containing the residuals for continuity and momentum:
+        - 'continuity': The divergence of the velocity field.
+        - 'momentum_u', 'momentum_v', ...: The momentum residuals for each velocity component.
+    """
+    # Velocity vector: use all fields starting with 'u', 'v', 'w' etc in order
+    vel_names = sorted([k for k in fields if k in ("u", "v", "w")])
+    U = [fields[name] for name in vel_names]
 
+    # Divergence of velocity: Continuity Equation
+    continuity = diff.div_vector(U, X)
 
-def navier_stokes(X, u, v, w, p, rho, mu):
-    u_x, u_y, u_z, u_t, u_lap = derivatives(u, X)
-    v_x, v_y, v_z, v_t, v_lap = derivatives(v, X)
-    w_x, w_y, w_z, w_t, w_lap = derivatives(w, X)
-    grad_p = grad(p, X)
-    return {"continuity": u_x + v_y + w_z,
-            "momentum_u": rho * (u_t + u * u_x + v * u_y + w * u_z) + grad_p[:, 0:1] - mu * u_lap,
-            "momentum_v": rho * (v_t + u * v_x + v * v_y + w * v_z) + grad_p[:, 1:2] - mu * v_lap,
-            "momentum_w": rho * (w_t + u * w_x + v * w_y + w * w_z) + grad_p[:, 2:3] - mu * w_lap}
+    momentum = []
+    for i, u_i in enumerate(U):
+        # Temporal derivative (assumed to be the last coordinate in X)
+        u_it = diff.del_scalar(u_i, X)[-1]
 
+        # Convective term: (U . grad) u_i
+        u_i_grads = diff.del_scalar(u_i, X)
+        convection = sum(U[j] * u_i_grads[j] for j in range(len(U)))
 
-def heat(X, T, alpha):
-    _, _, _, T_t, T_lap = derivatives(T, X)
+        # Pressure gradient
+        p_grads = diff.del_scalar(p, X)
+        grad_p_i = p_grads[i]
+
+        # Diffusion term: mu * Laplacian(u_i)
+        lap_u_i = diff.laplacian(u_i, X, spatial_dims=spatial_dims)
+
+        # rho * (u_it + convection) + grad_p - mu * lap
+        res = rho * (u_it + convection) + grad_p_i - mu * lap_u_i
+        momentum.append(res)
+
+    results = {"continuity": continuity}
+    for i, name in enumerate(vel_names):
+        results[f"momentum_{name}"] = momentum[i]
+
+    return results
+
+def heat(
+    X: List[torch.Tensor],
+    fields: Dict[str, torch.Tensor],
+    alpha: Union[float, torch.Tensor],
+    spatial_dims: int = 3
+) -> Dict[str, torch.Tensor]:
+    """
+    Computes the residual for the heat equation (diffusion of temperature).
+
+    Args:
+        X: List of coordinate tensors [x, y, ..., t].
+        fields: Dictionary containing the temperature field {'T': ...}.
+        alpha: Thermal diffusivity (scalar or tensor).
+        spatial_dims: Number of spatial dimensions.
+
+    Returns:
+        Dictionary containing the residual: {'energy': T_t - alpha * Laplacian(T)}.
+    """
+    T = fields["T"]
+    T_t = diff.del_scalar(T, X)[-1]
+    T_lap = diff.laplacian(T, X, spatial_dims=spatial_dims)
     return {"energy": T_t - alpha * T_lap}
 
+def species_soret(
+    X: List[torch.Tensor],
+    fields: Dict[str, torch.Tensor],
+    rho: Union[float, torch.Tensor],
+    D: Union[float, torch.Tensor],
+    DT: Union[float, torch.Tensor],
+    spatial_dims: int = 3
+) -> Dict[str, torch.Tensor]:
+    """
+    Computes the residual for species transport including the Soret effect (thermophoresis).
 
-def species_soret(X, Y, T, u, v, w, rho, D, DT):
-    Y_x, Y_y, Y_z, Y_t, Y_lap = derivatives(Y, X)
-    _, _, _, _, T_lap = derivatives(T, X)
-    return {"species": rho * (Y_t + u * Y_x + v * Y_y + w * Y_z) - D * Y_lap - DT * T_lap}
+    Args:
+        X: List of coordinate tensors [x, y, ..., t].
+        fields: Dictionary containing velocity ('u', 'v', 'w'), species concentration ('Y'),
+                and temperature ('T').
+        rho: Density (scalar or tensor).
+        D: Diffusion coefficient (scalar or tensor).
+        DT: Soret coefficient (scalar or tensor).
+        spatial_dims: Number of spatial dimensions.
 
+    Returns:
+        Dictionary containing the residual: {'species': rho*(Y_t + U.grad(Y)) - D*Lap(Y) - DT*Lap(T)}.
+    """
+    Y = fields["Y"]
+    T = fields["T"]
+    # Velocity vector for convection
+    vel_names = sorted([k for k in fields if k in ("u", "v", "w")])
+    U = [fields[name] for name in vel_names]
 
-def diffusion(X, c, D):
-    _, _, _, c_t, c_lap = derivatives(c, X)
+    Y_t = diff.del_scalar(Y, X)[-1]
+    Y_grads = diff.del_scalar(Y, X)
+    convection = sum(U[j] * Y_grads[j] for j in range(len(U)))
+
+    Y_lap = diff.laplacian(Y, X, spatial_dims=spatial_dims)
+    T_lap = diff.laplacian(T, X, spatial_dims=spatial_dims)
+
+    return {"species": rho * (Y_t + convection) - D * Y_lap - DT * T_lap}
+
+def diffusion(
+    X: List[torch.Tensor],
+    fields: Dict[str, torch.Tensor],
+    D: Union[float, torch.Tensor],
+    spatial_dims: int = 3
+) -> Dict[str, torch.Tensor]:
+    """
+    Computes the residual for the pure diffusion equation.
+
+    Args:
+        X: List of coordinate tensors [x, y, ..., t].
+        fields: Dictionary containing the concentration field {'c': ...}.
+        D: Diffusion coefficient (scalar or tensor).
+        spatial_dims: Number of spatial dimensions.
+
+    Returns:
+        Dictionary containing the residual: {'species': c_t - D * Laplacian(c)}.
+    """
+    c = fields["c"]
+    c_t = diff.del_scalar(c, X)[-1]
+    c_lap = diff.laplacian(c, X, spatial_dims=spatial_dims)
     return {"species": c_t - D * c_lap}
 
+def advection_diffusion(
+    X: List[torch.Tensor],
+    fields: Dict[str, torch.Tensor],
+    D: Union[float, torch.Tensor],
+    spatial_dims: int = 3
+) -> Dict[str, torch.Tensor]:
+    """
+    Computes the residual for the advection-diffusion equation.
 
-def advection_diffusion(X, c, u, v, w, D):
-    c_x, c_y, c_z, c_t, c_lap = derivatives(c, X)
-    return {"species": c_t + u * c_x + v * c_y + w * c_z - D * c_lap}
+    Args:
+        X: List of coordinate tensors [x, y, ..., t].
+        fields: Dictionary containing the concentration field ('c') and velocity fields ('u', 'v', 'w').
+        D: Diffusion coefficient (scalar or tensor).
+        spatial_dims: Number of spatial dimensions.
+
+    Returns:
+        Dictionary containing the residual: {'species': c_t + U.grad(c) - D * Laplacian(c)}.
+    """
+    c = fields["c"]
+    vel_names = sorted([k for k in fields if k in ("u", "v", "w")])
+    U = [fields[name] for name in vel_names]
+
+    c_t = diff.del_scalar(c, X)[-1]
+    c_grads = diff.del_scalar(c, X)
+    convection = sum(U[j] * c_grads[j] for j in range(len(U)))
+
+    c_lap = diff.laplacian(c, X, spatial_dims=spatial_dims)
+    return {"species": c_t + convection - D * c_lap}

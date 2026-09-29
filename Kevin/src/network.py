@@ -7,52 +7,78 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import torch
 import torch.nn as nn
-
-
-class FNN(nn.Module):
-    def __init__(self, layers=(4, 64, 64, 64, 64, 4)):
-        super().__init__()
-        modules = []
-        for i in range(len(layers) - 2):
-            modules.append(nn.Linear(layers[i], layers[i + 1]))
-            modules.append(nn.Tanh())
-        modules.append(nn.Linear(layers[-2], layers[-1]))
-        self.net = nn.Sequential(*modules)
-        for m in self.net:
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_uniform_(m.weight)
-                nn.init.zeros_(m.bias)
-
-    def forward(self, x):
-        return self.net(x)
-
+import pinn_torch as pinn
 
 class PINN(nn.Module):
-    def __init__(self, layers, lo, hi, feature=None, n_feature=0, n_param=0):
+    def __init__(self, layers, lo, hi, feature=None, n_feature=0, n_param=0, num_centers=11):
         super().__init__()
-        self.layers = tuple(int(v) for v in layers)
-        head = self.layers[0]
-        self.n_param = int(n_param)
+        # layers is expected to be (input_dim, h1, h2, ..., h_n, output_dim)
+        # We use these to configure the modular components
+
+        # Domain normalization for RBF
+        self.lo = torch.as_tensor(lo, dtype=torch.float64)
+        self.hi = torch.as_tensor(hi, dtype=torch.float64)
+        domain_sizes = (self.hi - self.lo).tolist()
+
+        # 1. Input Encoding: Radial Basis Function
+        # num_centers is now configurable to manage memory/capacity
+        self.encoder = pinn.pinn.RadialBasisFunction(
+            num_centers=num_centers,
+            domain_sizes=domain_sizes
+        )
+
+        # 2. Backbone: Residual Fully Connected MLP
+        # Input dim is the number of RBF centers
+        num_inputs = self.encoder.rbf_centers.shape[1]
+        nodes_per_layer = layers[1] if len(layers) > 1 else 32
+        num_layers = len(layers) - 2 if len(layers) > 2 else 1
+
+        self.backbone = pinn.pinn.ResidualFullyConnected(
+            num_inputs=num_inputs,
+            num_layers=num_layers,
+            nodes_per_layer=nodes_per_layer
+        )
+
+        # 3. Output Head: PhysicsLayer
+        # We assume all outputs are linear unless specified otherwise.
+        # For the Kevin experiments, the output dimension is layers[-1].
+        num_outputs = layers[-1]
+        self.head_layer = pinn.pinn.PhysicsLayer(
+            num_inputs=nodes_per_layer,
+            num_linear_outputs=num_outputs
+        )
+
+        # 4. Composition: PhysicsHead or PhysicsHeadSteady
+        # Use PhysicsHead if it's time-dependent (dim > 3 for x,y,z,t), else PhysicsHeadSteady
+        if len(lo) > 3:
+            self.model = pinn.pinn.PhysicsHead(
+                layers=(self.encoder, self.backbone, self.head_layer),
+                num_spatial=len(lo) - 1
+            )
+        else:
+            self.model = pinn.pinn.PhysicsHeadSteady(
+                layers=(self.encoder, self.backbone, self.head_layer),
+                num_spatial=len(lo)
+            )
+
         self.feature, self.n_feature = feature, int(n_feature)
-        n_coord = head - self.n_feature
-        self.net = FNN(self.layers)
-        lo = torch.as_tensor(lo, dtype=torch.float64).reshape(-1)
-        hi = torch.as_tensor(hi, dtype=torch.float64).reshape(-1)
-        if lo.numel() != n_coord or hi.numel() != n_coord:
-            raise ValueError(f"lo/hi must have {n_coord} entries (layers[0] {head} - {self.n_feature} feature "
-                             f"columns), got {lo.numel()}/{hi.numel()}")
-        if (self.feature is None) != (self.n_feature == 0):
-            raise ValueError("feature and n_feature must be given together")
-        span = hi - lo
-        self.register_buffer("lo", lo)
-        self.register_buffer("span", torch.where(span > 0, span, torch.ones_like(span)))
+        self.n_param = int(n_param)
 
     def forward(self, coords):
-        x = 2.0 * (coords - self.lo) / self.span - 1.0
-        if self.feature is not None:
-            x = torch.cat([x, self.feature(coords).to(x.dtype)], dim=1)
-        return self.net(x)
+        # The Kevin training driver passes a single tensor (N, dim).
+        if isinstance(coords, torch.Tensor):
+            coords_list = [coords[:, i:i+1] for i in range(coords.shape[1])]
+        else:
+            coords_list = coords
 
+        if isinstance(self.model, pinn.pinn.PhysicsHead):
+            # Split into spatial and temporal parts
+            spatial = coords_list[:-1]
+            t = coords_list[-1]
+            return self.model(spatial, t)
+        else:
+            # PhysicsHeadSteady expects only spatial
+            return self.model(coords_list)
 
 class Theta(nn.Module):
     def __init__(self, specs):
